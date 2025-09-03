@@ -1,123 +1,112 @@
 import cv2
-import numpy as np
 import PySimpleGUI as sg
 import mediapipe as mp
+from gesture_recognizer import get_straight_finger_tips, recognize_gesture
+from hand_tracker import RegionTracker
 
 
-class HandGestureApp:
-    def __init__(self):
-        # 初始化MediaPipe Hands
-        self.mp_hands = mp.solutions.hands
-        self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
-            max_num_hands=1,
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.5)
-        self.mp_drawing = mp.solutions.drawing_utils
+sg.theme('DarkBlack1')  # 接近全黑主题
 
-        # 初始化GUI
-        self.layout = [
-            [sg.Text('手势识别程序', size=(30, 1), justification='center', font=("Helvetica", 25))],
-            [sg.Image(filename='', key='image')],
-            [sg.Text('检测到的手势: ', size=(20, 1), font=("Helvetica", 15), key='gesture')],
-            [sg.Button('开始', size=(10, 1)), sg.Button('退出', size=(10, 1))]
-        ]
+# 初始化MediaPipe Hands
+mp_hands = mp.solutions.hands
+mp_drawing = mp.solutions.drawing_utils
+hands_model = mp_hands.Hands(static_image_mode=False, max_num_hands=2,
+                             min_detection_confidence=0.7, min_tracking_confidence=0.5)
 
-        self.window = sg.Window('手势识别', self.layout, location=(100, 100))
-        self.cap = None
-        self.is_running = False
+tracker = RegionTracker(iou_threshold=0.3, target_frames=30)
 
-    def recognize_gesture(self, hand_landmarks):
-        """根据手部关键点识别手势"""
-        # 获取关键点坐标
-        landmarks = hand_landmarks.landmark
+# GUI布局
+layout = [
+    [sg.Text('手势识别 + ROI 跟踪',
+             font=("KaiTi", 28, 'bold'),
+             justification='center',
+             text_color='white',
+             background_color='black')],
+    [sg.Image(filename='',
+              key='image',
+              size=(640, 480),
+              background_color='black')],
+    [sg.Text('检测到手势: ',
+             key='gesture',
+             font=("KaiTi", 20),
+             text_color='white',
+             background_color='black')],
+    [sg.Button('开始',
+               font=("KaiTi", 16),
+               button_color=('white', 'black')),
+     sg.Button('退出',
+               font=("KaiTi", 16),
+               button_color=('white', 'firebrick'))]
+]
 
-        # 计算手指状态
-        fingers = []
+# 设置整个窗口背景为黑色
+window = sg.Window('Hand Gesture + ROI', layout,
+                   resizable=True,
+                   element_justification='center',
+                   background_color='black')
 
-        # 拇指: 比较拇指尖和拇指根部的x坐标
-        if landmarks[self.mp_hands.HandLandmark.THUMB_TIP].x < landmarks[self.mp_hands.HandLandmark.THUMB_IP].x:
-            fingers.append(1)
+cap = None
+is_running = False
+roi_counter = 0
+# 主循环
+while True:
+    event, values = window.read(timeout=20)
+    if event in (sg.WIN_CLOSED, '退出'):
+        break
+    elif event == '开始':
+        if not is_running:
+            cap = cv2.VideoCapture(0)
+            is_running = True
+            window['开始'].update('停止', button_color=('white','orange'))
         else:
-            fingers.append(0)
+            cap.release()
+            is_running = False
+            window['开始'].update('开始', button_color=('white','green'))
 
-        # 其他四指: 比较指尖和指关节的y坐标
-        for tip, pip in [(self.mp_hands.HandLandmark.INDEX_FINGER_TIP, self.mp_hands.HandLandmark.INDEX_FINGER_PIP),
-                         (self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP, self.mp_hands.HandLandmark.MIDDLE_FINGER_PIP),
-                         (self.mp_hands.HandLandmark.RING_FINGER_TIP, self.mp_hands.HandLandmark.RING_FINGER_PIP),
-                         (self.mp_hands.HandLandmark.PINKY_TIP, self.mp_hands.HandLandmark.PINKY_PIP)]:
-            if landmarks[tip].y < landmarks[pip].y:
-                fingers.append(1)
-            else:
-                fingers.append(0)
+    if is_running and cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        frame = cv2.flip(frame, 1)
+        h, w, _ = frame.shape
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands_model.process(rgb_frame)
 
-        # 根据手指状态判断手势
-        total_fingers = fingers.count(1)
+        tip_points = []
+        gesture_text = "未检测到手部"
 
-        if total_fingers == 0:
-            return "握拳"
-        elif total_fingers == 5:
-            return "张开手掌"
-        elif fingers == [0, 1, 0, 0, 0]:
-            return "食指指向"
-        elif fingers == [0, 1, 1, 0, 0]:
-            return "胜利手势"
-        elif total_fingers == 1 and fingers[0] == 1:
-            return "竖大拇指"
-        else:
-            return f"{total_fingers}根手指"
+        if results.multi_hand_landmarks:
+            gesture_text = recognize_gesture(results.multi_hand_landmarks)
+            for hand_landmarks in results.multi_hand_landmarks:
+                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
+                                          mp_drawing.DrawingSpec(color=(0,255,255), thickness=2, circle_radius=4),
+                                          mp_drawing.DrawingSpec(color=(255,0,255), thickness=2))
+                tips = get_straight_finger_tips(hand_landmarks)
+                for x, y in tips:
+                    tip_points.append((int(x*w), int(y*h)))
 
-    def run(self):
-        """运行主程序"""
-        while True:
-            event, values = self.window.read(timeout=20)
+        # ROI 跟踪
+        if tip_points:
+            x_min = min(p[0] for p in tip_points)
+            y_min = min(p[1] for p in tip_points)
+            x_max = max(p[0] for p in tip_points)
+            y_max = max(p[1] for p in tip_points)
+            box = (x_min, y_min, x_max, y_max)
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
 
-            if event == '退出' or event == sg.WIN_CLOSED:
-                break
+            if tracker.update(box):
+                roi = frame[y_min:y_max, x_min:x_max]
 
-            elif event == '开始':
-                if not self.is_running:
-                    self.cap = cv2.VideoCapture(0)
-                    self.is_running = True
-                    self.window['开始'].update('停止')
-                else:
-                    self.cap.release()
-                    self.is_running = False
-                    self.window['开始'].update('开始')
+                roi_counter += 1
+                filename = f'hand_roi_{roi_counter:03d}.png'
+                cv2.imwrite(filename, roi)
+                print(f"ROI saved to {filename}")
 
-            if self.is_running and self.cap.isOpened():
-                ret, frame = self.cap.read()
-                if ret:
-                    # 水平翻转图像
-                    frame = cv2.flip(frame, 1)
+        # 转为PySimpleGUI显示
+        img_bytes = cv2.imencode('.png', frame)[1].tobytes()
+        window['image'].update(data=img_bytes)
+        window['gesture'].update(f'检测到手势: {gesture_text}')
 
-                    # 转换颜色空间 BGR to RGB
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                    # 处理图像并检测手部
-                    results = self.hands.process(rgb_frame)
-
-                    gesture_text = "未检测到手部"
-
-                    # 绘制手部关键点和连接线
-                    if results.multi_hand_landmarks:
-                        for hand_landmarks in results.multi_hand_landmarks:
-                            self.mp_drawing.draw_landmarks(
-                                frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
-
-                            # 识别手势
-                            gesture_text = self.recognize_gesture(hand_landmarks)
-
-                    # 更新GUI
-                    img_bytes = cv2.imencode('.png', frame)[1].tobytes()
-                    self.window['image'].update(data=img_bytes)
-                    self.window['gesture'].update(f'检测到的手势: {gesture_text}')
-
-        if self.cap and self.cap.isOpened():
-            self.cap.release()
-        self.window.close()
-
-
-if __name__ == '__main__':
-    app = HandGestureApp()
-    app.run()
+if cap:
+    cap.release()
+window.close()
