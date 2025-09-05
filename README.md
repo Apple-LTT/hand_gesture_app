@@ -59,7 +59,6 @@ hand_gesture_app/
 ├─ main.py                  # 主程序入口
 ├─ gesture_recognizer.py    # 手势识别函数
 ├─ hand_tracker.py          # ROI 跟踪逻辑
-├─ roi_images/              # 保存的ROI图片
 └─ README.md                # 使用说明
 ```
 
@@ -69,10 +68,9 @@ hand_gesture_app/
 克隆项目或下载源码到本地
 
 ```bash
-git clone https://github.com/yourname/hand_gesture_app.git
+git clone https://github.com/Apple-LTT/hand_gesture_app
 cd hand_gesture_app
 ```
-确保存在 roi_images/ 文件夹（程序会自动创建）
 
 启动程序
 
