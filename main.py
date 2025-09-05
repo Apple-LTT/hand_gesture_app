@@ -4,7 +4,7 @@ import mediapipe as mp
 from gesture_recognizer import get_straight_finger_tips, recognize_gesture
 from hand_tracker import RegionTracker
 
-# ---------------- GUI 设置 ----------------
+# GUI 设置
 sg.theme('DarkBlack1')  # 接近全黑主题
 
 layout = [
@@ -35,7 +35,7 @@ window = sg.Window('Hand Gesture + ROI', layout,
                    element_justification='center',
                    background_color='black')
 
-# ---------------- MediaPipe Hands 初始化 ----------------
+# MediaPipe Hands 初始化
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 hands_model = mp_hands.Hands(static_image_mode=False,
@@ -49,7 +49,7 @@ cap = None
 is_running = False
 roi_counter = 0
 
-# ---------------- 主循环 ----------------
+# 主循环
 while True:
     event, values = window.read(timeout=20)
     if event in (sg.WIN_CLOSED, '退出'):
