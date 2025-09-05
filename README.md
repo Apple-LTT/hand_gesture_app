@@ -72,7 +72,6 @@ hand_gesture_app/
 git clone https://github.com/yourname/hand_gesture_app.git
 cd hand_gesture_app
 ```
-确保存在 roi_images/ 文件夹（程序会自动创建）
 
 启动程序
 
