@@ -92,21 +92,4 @@ python main.py
 hand_roi_001.png
 hand_roi_002.png
 hand_roi_003.png
-```
-# Linux 下手势识别与 ROI 跟踪系统一键启动脚本
 
-下面的命令可以在 Linux 上 **创建虚拟环境、安装依赖并运行程序**，适合直接演示或提交。
-
----
-
-## 一条命令版本
-
-```bash
-# 一条命令执行（复制到终端即可）
-python3 -m venv hand_gesture_env && \
-source hand_gesture_env/bin/activate && \
-pip install --upgrade pip && \
-pip install opencv-python mediapipe PySimpleGUI numpy && \
-sudo apt update && sudo apt install -y python3-tk && \
-cd hand_gesture_app && \
-python3 main.py
